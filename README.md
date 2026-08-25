@@ -6,21 +6,54 @@
 
 ## 功能
 
-- 通过图片查询相似图片。
+- Web 可视化页面上传图片并搜索相似结果。
+- 支持本地图片批量导入索引。
+- 支持外部图片 URL 导入索引，由后端下载，避免浏览器跨域限制。
 - 使用 `google/siglip2-so400m-patch14-384` 生成图片向量。
 - 使用 Qdrant 存储和检索向量。
-- 提供 FastAPI 接口，包含健康检查、统计、入库、检索和错误记录接口。
+- 提供本地 HTTP 路由，包含健康检查、统计、入库、检索和错误记录。
 - 支持内存队列，也可以通过 Redis 配置持久化队列。
 - 使用本地 SQLite 保存失败记录，便于排查和重试。
 - 提供 Windows 本地启动脚本。
 
+## Web 页面
+
+启动服务后，可以直接打开 Web 工作台：
+
+```text
+http://127.0.0.1:4568/
+```
+
+页面功能：
+
+- 上传一张查询图片进行相似度搜索。
+- 设置返回数量和相似度阈值。
+- 查看相似结果、相似度、图片 ID 和图片来源。
+- 选择多张本地图片导入索引。
+- 粘贴多行外部图片 URL 导入索引。
+- 查看当前网页操作产生的搜索、导入和错误日志。
+- 查看索引数量、队列数量和失败数量。
+
+如果需要在局域网内访问，请在 `.env` 中把监听地址改为：
+
+```env
+HOST=0.0.0.0
+PORT=4568
+```
+
+然后局域网内其他设备访问：
+
+```text
+http://服务主机IP:4568/
+```
+
 ## 架构
 
 ```text
-图片文件 / API 调用
+Web 页面 / 本地调用
         |
         v
-FastAPI 服务
+FastAPI 本地服务
         |
         v
 SigLIP2 图片向量模型
@@ -32,67 +65,77 @@ Qdrant 向量集合
 Top-K 相似图片结果
 ```
 
-图片处理、模型推理和向量检索都在本地完成，服务本身不依赖远程图片识别 API。
+图片处理、模型推理和向量检索都在本地完成。服务本身不依赖远程图片识别 API。
 
 ## 目录结构
 
 ```text
 app/
-  api/                 FastAPI 接口和数据结构
+  api/                 本地 HTTP 路由和数据结构
   core/                配置和队列逻辑
   services/            模型、向量库、错误记录和后台任务
   utils/               图片编码解码工具
+web/                   可视化以图搜图页面
 config/                Qdrant 本地配置
 scripts/               Qdrant 启动和停止脚本
-examples/              API 调用示例
+examples/              本地服务调用示例
 requirements.txt       Python 依赖
 .env.example           配置模板
 ```
 
-以下本地运行文件不会提交到仓库：
+## 仓库没有上传的内容
 
-- 原始图片数据
-- Qdrant 运行数据和快照
-- 日志
-- Python 虚拟环境
-- 便携 Python 运行时
-- 本地模型缓存
-- 临时文件
+本仓库只保留公开代码、配置模板、Web 页面和调用示例，不上传运行时大文件和业务数据。
 
-## 模型配置
+### 1. 模型权重没有上传
 
-默认模型：
+模型权重指的是模型参数文件，例如本地开发环境中的：
 
-https://huggingface.co/google/siglip2-so400m-patch14-384
+```text
+models/google_siglip2-so400m-patch14-384/model.safetensors
+```
 
-本仓库不上传模型权重。默认配置会让 Transformers 从 Hugging Face 下载模型，并缓存在本地：
+该文件体积约 4GB 以上。普通 GitHub 仓库不适合直接提交这类大文件，GitHub 对普通 Git 文件和 Git LFS 文件都有大小、存储和流量限制。
+
+因此本项目默认通过 Hugging Face 下载模型：
 
 ```env
 MODEL_NAME=google/siglip2-so400m-patch14-384
 MODEL_LOCAL_FILES_ONLY=false
 ```
 
-如果你已经提前下载了模型，也可以改成本地路径：
+模型页面：
+
+```text
+https://huggingface.co/google/siglip2-so400m-patch14-384
+```
+
+如果已经提前下载了模型，也可以改为本地路径：
 
 ```env
 MODEL_NAME=models/google_siglip2-so400m-patch14-384
 MODEL_LOCAL_FILES_ONLY=true
 ```
 
-大模型文件不建议直接用普通 Git 提交。如果确实需要把 `*.safetensors`、`*.bin`、`*.pt`、`*.pth`、`*.onnx` 等文件放到 GitHub，需要先配置 Git LFS，并确认账号的 LFS 单文件大小、存储和流量限制。
+### 2. 示例图片和索引数据没有上传
 
-## 环境要求
+示例图片、采购图片、商品图片、价格、供应商、库存等内容通常属于具体业务数据，不适合放在公开仓库。
 
-- Python 3.10 或更高版本。
-- 本地 Qdrant 服务。
-- 如需 GPU 推理，需要 NVIDIA 显卡驱动和支持 CUDA 的 PyTorch。
-- 足够的磁盘空间用于向量库、日志和模型缓存。
+另外，Qdrant 的向量索引和快照文件也会随着图片数量快速变大。对于几十万张图片规模，索引文件可能达到数 GB。公开仓库只提供导入和检索代码，索引数据应由使用者在本地根据自己的图片重新生成。
 
-当 `DEVICE=cuda` 且 PyTorch 能识别显卡时，服务会使用 CUDA。需要强制 CPU 时，可以设置：
+被排除的典型目录：
 
-```env
-DEVICE=cpu
+```text
+data/
+models/
+logs/
+venv/
+tools/qdrant/
 ```
+
+### 3. Qdrant 运行程序没有上传
+
+`tools/qdrant/` 属于本地运行依赖，未提交到仓库。使用时可以自行安装 Qdrant，或把 Qdrant 可执行文件放到本地对应目录。
 
 ## 快速开始
 
@@ -115,7 +158,13 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 start.bat
 ```
 
-4. 打开接口文档：
+4. 打开 Web 页面：
+
+```text
+http://127.0.0.1:4568/
+```
+
+5. 打开本地 API 文档：
 
 ```text
 http://127.0.0.1:4568/docs
@@ -138,10 +187,10 @@ http://127.0.0.1:4568/docs
 | `MODEL_LOCAL_FILES_ONLY` | `false` | 是否只加载本地模型文件。 |
 | `DEVICE` | `cuda` | 推理设备，通常为 `cuda` 或 `cpu`。 |
 | `BATCH_SIZE` | `64` | 批量入库的推理批大小。 |
-| `HOST` | `127.0.0.1` | API 监听地址。 |
+| `HOST` | `127.0.0.1` | API 监听地址。局域网访问可设为 `0.0.0.0`。 |
 | `PORT` | `4568` | API 端口。 |
 
-## API 示例
+## 本地服务调用示例
 
 健康检查：
 
@@ -184,13 +233,103 @@ python examples\search_image.py C:\images\query.jpg --top-k 20
 
 ## 数据流程
 
-1. 服务读取本地图片路径或 API 提交的图片内容。
+1. 服务读取本地图片路径、Web 上传图片或外部图片 URL。
 2. SigLIP2 模型将图片转换为归一化向量。
 3. Qdrant 保存图片向量和对应元数据。
 4. 检索时，查询图片会先转换为向量，再从 Qdrant 返回最相似的结果。
 5. 处理失败的记录会写入本地错误库，便于后续查看和重试。
 
 大规模索引建议把 Qdrant 数据放在 SSD 上，并使用 GPU 执行向量生成。
+
+## 应用案例：多供应商采购平台的同 EAN 低价匹配
+
+在多供应商采购平台中，同一个 EAN/ENA 码可能对应多个供应商、不同报价、库存数量、包装规格和仓库。传统表格匹配主要依赖条码或文本字段，遇到图片相似但标题不一致、字段缺失、供应商命名不统一等情况时，容易漏掉可比价商品。
+
+本项目可以作为采购比价流程中的本地图片检索模块：
+
+1. 将各供应商商品图片导入本地向量索引。
+2. 使用待采购商品图片进行相似度搜索。
+3. 返回视觉上最相似的一组候选商品。
+4. 业务系统再结合 EAN/ENA 码、价格、库存、包装数、仓库和供应商优先级进行二次筛选。
+5. 最终辅助定位同码或相似商品中的低价可采购项。
+
+该方案适合在局域网内部署。图片向量化、索引构建和检索都在本地完成，避免把采购图片和商品数据发送到外部识别服务。
+
+## 商品参数映射的接入方法
+
+当前公开版为了保持通用，只返回以下搜索结果字段：
+
+```json
+{
+  "id": "image-000001",
+  "url": "https://example.com/image.jpg",
+  "score": 0.9821,
+  "rank": 1
+}
+```
+
+如果要接入多供应商采购平台，需要在图片入库时把商品参数作为 `metadata` 写入向量库，并在搜索结果中返回。推荐的数据结构如下：
+
+```json
+{
+  "id": "image-000001",
+  "base64": "data:image/jpeg;base64,...",
+  "url": "https://example.com/image.jpg",
+  "metadata": {
+    "ean": "8414926111177",
+    "title": "商品名称",
+    "supplier": "供应商 A",
+    "price": 4.32,
+    "currency": "EUR",
+    "stock": 282,
+    "package_count": 1,
+    "box_count": 1,
+    "warehouse": "仓库 A",
+    "sku": "SKU-001"
+  }
+}
+```
+
+代码接入位置：
+
+1. 在 `app/api/schemas.py` 的 `ImageIngestRequest` 中增加 `metadata` 字段。
+2. 在 `app/core/queue.py` 的 `IngestTask` 中增加 `metadata` 字段，保证队列能传递商品参数。
+3. 在 `app/services/vector_db.py` 的 `upsert_vectors` 中把 `metadata` 写入 Qdrant payload。
+4. 在 `app/services/vector_db.py` 的 `search` 和 `search_batch` 中把 payload 里的商品参数返回给前端。
+5. 在 `app/api/schemas.py` 的 `SearchResult` 中增加 `metadata` 字段。
+6. 在 `web/app.js` 和 `web/index.html` 中展示 EAN/ENA、价格、供应商、库存、包装数、仓库等字段。
+
+推荐的 Qdrant payload 结构：
+
+```json
+{
+  "id": "image-000001",
+  "url": "https://example.com/image.jpg",
+  "instance": "local-image-search",
+  "metadata": {
+    "ean": "8414926111177",
+    "title": "商品名称",
+    "supplier": "供应商 A",
+    "price": 4.32,
+    "currency": "EUR",
+    "stock": 282,
+    "package_count": 1,
+    "box_count": 1,
+    "warehouse": "仓库 A",
+    "sku": "SKU-001"
+  }
+}
+```
+
+有了商品数据后，接入流程如下：
+
+1. 从现有采购平台导出商品表，至少包含图片地址、图片 ID、EAN/ENA、价格、供应商和库存。
+2. 使用图片 ID 作为稳定主键，确保同一商品重复导入时覆盖同一个向量点。
+3. 把图片内容和商品参数一起提交到入库路由。
+4. 搜图返回相似候选后，业务系统按 EAN/ENA 相同、价格最低、库存可用、供应商优先级等规则筛选。
+5. 前端页面展示相似图片和对应商品参数，供人工复核或后续自动下单流程使用。
+
+如果商品数据存放在独立数据库中，也可以只把 `id`、`url` 写入 Qdrant，搜索返回 `id` 后再由业务系统根据 `id` 查询商品详情。这种方式能减少向量库 payload 体积，也更方便复用现有商品数据库。
 
 ## 常用操作
 

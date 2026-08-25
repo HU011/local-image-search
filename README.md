@@ -1,158 +1,161 @@
-# Local Image Search
+# 本地以图搜图服务
 
-Local image similarity search service built with FastAPI, Qdrant, and a SigLIP2 vision model.
+这是一个基于 FastAPI、Qdrant 和 SigLIP2 图像模型构建的本地图片相似度检索服务。
 
-The project is designed for fully local image embedding, vector indexing, and nearest-neighbor search. It can run on CPU, but the intended high-throughput setup uses an NVIDIA GPU. The local development environment for this project includes an RTX 5090 GPU and has been used with an index of 660,434 images.
+项目用于在本地完成图片向量化、向量索引构建和相似图片检索。服务可以在 CPU 上运行，但高吞吐场景建议使用 NVIDIA GPU。本地开发环境包含 RTX 5090 显卡，并已用于 660,434 张图片规模的向量索引。
 
-## Features
+## 功能
 
-- Image-to-image similarity search from a local file or API upload.
-- GPU-accelerated embedding with `google/siglip2-so400m-patch14-384`.
-- Qdrant vector database for approximate nearest-neighbor search.
-- FastAPI service with health, stats, ingest, and search endpoints.
-- Optional Redis queue configuration for asynchronous workloads.
-- Local SQLite error store for failed or skipped image records.
-- Windows startup scripts for local service operation.
+- 通过图片查询相似图片。
+- 使用 `google/siglip2-so400m-patch14-384` 生成图片向量。
+- 使用 Qdrant 存储和检索向量。
+- 提供 FastAPI 接口，包含健康检查、统计、入库、检索和错误记录接口。
+- 支持内存队列，也可以通过 Redis 配置持久化队列。
+- 使用本地 SQLite 保存失败记录，便于排查和重试。
+- 提供 Windows 本地启动脚本。
 
-## Architecture
+## 架构
 
 ```text
-image file / API client
+图片文件 / API 调用
         |
         v
-FastAPI service
+FastAPI 服务
         |
         v
-SigLIP2 embedding model
+SigLIP2 图片向量模型
         |
         v
-Qdrant vector collection
+Qdrant 向量集合
         |
         v
-top-k similar image results
+Top-K 相似图片结果
 ```
 
-All image processing, model inference, and vector search run locally. The service does not require sending image data to a remote API.
+图片处理、模型推理和向量检索都在本地完成，服务本身不依赖远程图片识别 API。
 
-## Repository Layout
+## 目录结构
 
 ```text
 app/
-  api/                 FastAPI routes
-  core/                environment and runtime settings
-  services/            embedding, vector database, queue, and error-store logic
-config/                local Qdrant configuration
-scripts/               helper scripts for Qdrant startup and shutdown
-models/                optional local model cache, not committed to Git
-examples/              minimal API usage examples
-requirements.txt       Python package dependencies
-.env.example           configuration template
+  api/                 FastAPI 接口和数据结构
+  core/                配置和队列逻辑
+  services/            模型、向量库、错误记录和后台任务
+  utils/               图片编码解码工具
+config/                Qdrant 本地配置
+scripts/               Qdrant 启动和停止脚本
+examples/              API 调用示例
+requirements.txt       Python 依赖
+.env.example           配置模板
 ```
 
-Runtime data is intentionally excluded from Git:
+以下本地运行文件不会提交到仓库：
 
-- raw image collections
-- Qdrant storage and snapshots
-- logs
-- local virtual environments
-- embedded Python runtimes
-- temporary caches
+- 原始图片数据
+- Qdrant 运行数据和快照
+- 日志
+- Python 虚拟环境
+- 便携 Python 运行时
+- 本地模型缓存
+- 临时文件
 
-## Model
+## 模型配置
 
-The default model is `google/siglip2-so400m-patch14-384`.
+默认模型：
 
-Model page:
+https://huggingface.co/google/siglip2-so400m-patch14-384
 
-- https://huggingface.co/google/siglip2-so400m-patch14-384
-
-The repository does not commit local model weights. By default, Transformers downloads the model from Hugging Face and caches it locally:
+本仓库不上传模型权重。默认配置会让 Transformers 从 Hugging Face 下载模型，并缓存在本地：
 
 ```env
 MODEL_NAME=google/siglip2-so400m-patch14-384
 MODEL_LOCAL_FILES_ONLY=false
 ```
 
-If the model has already been downloaded to a local directory, point the service at that path:
+如果你已经提前下载了模型，也可以改成本地路径：
 
 ```env
 MODEL_NAME=models/google_siglip2-so400m-patch14-384
 MODEL_LOCAL_FILES_ONLY=true
 ```
 
-Large model files such as `*.safetensors` should not be committed with normal Git. If a project intentionally stores them in GitHub, configure Git LFS first and check the target account's LFS file-size and billing limits.
+大模型文件不建议直接用普通 Git 提交。如果确实需要把 `*.safetensors`、`*.bin`、`*.pt`、`*.pth`、`*.onnx` 等文件放到 GitHub，需要先配置 Git LFS，并确认账号的 LFS 单文件大小、存储和流量限制。
 
-## Requirements
+## 环境要求
 
-- Python 3.10 or newer.
-- Qdrant local server.
-- NVIDIA driver and CUDA-capable PyTorch build for GPU inference.
-- Sufficient disk space for vector storage and model files.
+- Python 3.10 或更高版本。
+- 本地 Qdrant 服务。
+- 如需 GPU 推理，需要 NVIDIA 显卡驱动和支持 CUDA 的 PyTorch。
+- 足够的磁盘空间用于向量库、日志和模型缓存。
 
-The service automatically uses CUDA when `DEVICE=cuda` and PyTorch can access the GPU. If CUDA is unavailable, set `DEVICE=cpu`.
+当 `DEVICE=cuda` 且 PyTorch 能识别显卡时，服务会使用 CUDA。需要强制 CPU 时，可以设置：
 
-## Quick Start
+```env
+DEVICE=cpu
+```
 
-1. Create a local configuration file:
+## 快速开始
+
+1. 创建本地配置：
 
 ```powershell
 copy .env.example .env
 ```
 
-2. Install dependencies:
+2. 安装依赖：
 
 ```powershell
 python -m venv venv
 venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-3. Start the local service:
+3. 启动服务：
 
 ```powershell
 start.bat
 ```
 
-4. Open the API documentation:
+4. 打开接口文档：
 
 ```text
 http://127.0.0.1:4568/docs
 ```
 
-## Configuration
+## 配置项
 
-The service reads settings from environment variables or `.env`.
+服务会读取环境变量或 `.env` 文件。
 
-| Variable | Default | Description |
+| 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `INSTANCE_NAME` | `local-image-search` | Human-readable service instance name. |
-| `QDRANT_URL` | `http://127.0.0.1:6335` | Qdrant HTTP endpoint. |
-| `QDRANT_GRPC_PORT` | `6336` | Qdrant gRPC port. |
-| `QDRANT_PREFER_GRPC` | `true` | Prefer gRPC for vector operations. |
-| `QDRANT_COLLECTION` | `local_image_search_images` | Vector collection name. |
-| `REDIS_URL` | empty | Optional Redis connection URL. |
-| `REDIS_QUEUE_KEY` | `image_search:local:task_queue` | Optional queue key. |
-| `MODEL_NAME` | `google/siglip2-so400m-patch14-384` | Hugging Face model id or local model path. |
-| `MODEL_LOCAL_FILES_ONLY` | `false` | Load only local model files when set to true. |
-| `DEVICE` | `cuda` | Inference device, usually `cuda` or `cpu`. |
-| `BATCH_SIZE` | `64` | Embedding batch size. |
-| `HOST` | `127.0.0.1` | API bind host. |
-| `PORT` | `4568` | API port. |
+| `INSTANCE_NAME` | `local-image-search` | 服务实例名称。 |
+| `QDRANT_URL` | `http://127.0.0.1:6335` | Qdrant HTTP 地址。 |
+| `QDRANT_GRPC_PORT` | `6336` | Qdrant gRPC 端口。 |
+| `QDRANT_PREFER_GRPC` | `true` | 向量操作优先使用 gRPC。 |
+| `QDRANT_COLLECTION` | `local_image_search_images` | Qdrant 向量集合名称。 |
+| `REDIS_URL` | 空 | 可选 Redis 地址。 |
+| `REDIS_QUEUE_KEY` | `image_search:local:task_queue` | Redis 队列键名。 |
+| `MODEL_NAME` | `google/siglip2-so400m-patch14-384` | Hugging Face 模型名或本地模型路径。 |
+| `MODEL_LOCAL_FILES_ONLY` | `false` | 是否只加载本地模型文件。 |
+| `DEVICE` | `cuda` | 推理设备，通常为 `cuda` 或 `cpu`。 |
+| `BATCH_SIZE` | `64` | 批量入库的推理批大小。 |
+| `HOST` | `127.0.0.1` | API 监听地址。 |
+| `PORT` | `4568` | API 端口。 |
 
-## API Examples
+## API 示例
 
-Health check:
+健康检查：
 
 ```powershell
 curl http://127.0.0.1:4568/health
 ```
 
-Service stats:
+查看状态：
 
 ```powershell
 curl http://127.0.0.1:4568/api/stats
 ```
 
-Search by image:
+用一张图片检索相似结果：
 
 ```powershell
 $imageBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\images\query.jpg"))
@@ -160,7 +163,7 @@ $body = @{ base64 = $imageBase64; top_k = 20 } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:4568/api/search" -ContentType "application/json" -Body $body
 ```
 
-Queue one image for indexing:
+提交一张图片进入索引队列：
 
 ```powershell
 $imageBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\images\image-000001.jpg"))
@@ -172,76 +175,67 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:4568/api/images/ingest" -ContentType "application/json" -Body $body
 ```
 
-The same calls are available as small Python examples:
+也可以使用示例脚本：
 
 ```powershell
 python examples\ingest_image.py C:\images\image-000001.jpg --id image-000001
 python examples\search_image.py C:\images\query.jpg --top-k 20
 ```
 
-## Local Data Lifecycle
+## 数据流程
 
-1. Images are read from local paths or local API uploads.
-2. The embedding service converts images into normalized vectors.
-3. Qdrant stores vectors and payload metadata.
-4. Search requests embed the query image and return the nearest stored vectors.
-5. Failed records are written to the local error store for inspection and retry.
+1. 服务读取本地图片路径或 API 提交的图片内容。
+2. SigLIP2 模型将图片转换为归一化向量。
+3. Qdrant 保存图片向量和对应元数据。
+4. 检索时，查询图片会先转换为向量，再从 Qdrant 返回最相似的结果。
+5. 处理失败的记录会写入本地错误库，便于后续查看和重试。
 
-For a large local index, keep Qdrant storage on a fast SSD and use GPU inference for embedding throughput.
+大规模索引建议把 Qdrant 数据放在 SSD 上，并使用 GPU 执行向量生成。
 
-## Operations
+## 常用操作
 
-Start foreground service:
+前台启动：
 
 ```powershell
 start.bat
 ```
 
-Start background service:
+后台启动：
 
 ```powershell
 start_service_background.bat
 ```
 
-Stop Qdrant helper process:
+停止服务：
 
 ```powershell
 stop.bat
 ```
 
-Runtime logs are written under `logs/`.
+运行日志位于 `logs/` 目录。
 
-## Troubleshooting
+## 常见问题
 
-CUDA is not being used:
+没有使用 GPU：
 
-- Confirm that PyTorch sees the GPU with `python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"`.
-- Confirm `DEVICE=cuda` in `.env`.
-- Install a PyTorch build compatible with the installed NVIDIA driver.
+- 确认 `.env` 中 `DEVICE=cuda`。
+- 执行 `python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"` 检查 PyTorch 是否能识别显卡。
+- 确认安装的 PyTorch 与本机 NVIDIA 驱动兼容。
 
-Qdrant collection is empty:
+Qdrant 集合为空：
 
-- Confirm `QDRANT_COLLECTION` matches the intended local collection.
-- Confirm Qdrant is using the expected storage directory.
-- Check `logs/qdrant.log` and the API `/stats` endpoint.
+- 确认 `QDRANT_COLLECTION` 是当前要使用的集合名。
+- 确认 Qdrant 使用的是预期的数据目录。
+- 查看 `logs/qdrant-server.stderr.log` 和 `/api/stats`。
 
-Model cannot load:
+模型加载失败：
 
-- If using local weights, confirm `MODEL_NAME` points to the local model directory.
-- If downloading from Hugging Face, set `MODEL_LOCAL_FILES_ONLY=false`.
-- Check disk space and read permissions for the model directory.
+- 默认配置会从 Hugging Face 下载模型，请确认网络可以访问 Hugging Face。
+- 如果使用本地模型目录，确认 `MODEL_NAME` 路径正确。
+- 检查磁盘空间和模型目录读取权限。
 
-Search returns no results:
+检索没有结果：
 
-- Confirm images have been indexed.
-- Confirm query images are valid JPG, PNG, WEBP, BMP, or TIFF files.
-- Confirm Qdrant is reachable at `QDRANT_URL`.
-
-## Public Repository Notes
-
-Before publishing:
-
-- Review staged files with `git status --short`.
-- Keep runtime data out of Git.
-- Use Git LFS for large model files.
-- Keep dataset-specific names, private logs, credentials, and local machine paths out of committed files.
+- 确认图片已经完成入库。
+- 确认查询图片格式正常，推荐 JPG、PNG、WEBP、BMP 或 TIFF。
+- 确认 Qdrant 可以通过 `QDRANT_URL` 访问。

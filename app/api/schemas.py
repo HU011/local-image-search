@@ -34,6 +34,31 @@ class BatchIngestResponse(BaseModel):
     queue_position_start: int = Field(..., description="Starting queue position")
 
 
+class UrlIngestRequest(BaseModel):
+    """External image URL ingest request."""
+
+    urls: list[str] = Field(..., description="Image URLs to fetch and ingest")
+    id_prefix: str = Field(default="", description="Optional id prefix")
+    skip_existing: bool = Field(default=True, description="Skip image ids already indexed")
+
+
+class UrlIngestError(BaseModel):
+    """External URL ingest failure."""
+
+    url: str
+    error_message: str
+
+
+class UrlIngestResponse(BaseModel):
+    """External image URL ingest response."""
+
+    queued_count: int = Field(..., description="Number of queued images")
+    skipped_count: int = Field(..., description="Number of skipped images")
+    failed_count: int = Field(..., description="Number of failed image URLs")
+    queue_position_start: int = Field(..., description="Starting queue position")
+    errors: list[UrlIngestError] = Field(default_factory=list, description="Failed URL records")
+
+
 class ImageIdCheckRequest(BaseModel):
     """Request for checking which image ids already exist in the vector index."""
 

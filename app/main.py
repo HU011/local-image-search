@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from app.api.routes import router
@@ -17,6 +19,7 @@ from app.services.worker import ingest_worker
 
 
 log_dir = PROJECT_ROOT / "logs"
+web_dir = PROJECT_ROOT / "web"
 log_dir.mkdir(parents=True, exist_ok=True)
 
 logger.remove()
@@ -98,6 +101,17 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+
+if web_dir.is_dir():
+    app.mount("/web", StaticFiles(directory=web_dir, html=True), name="web")
+
+
+@app.get("/", include_in_schema=False)
+async def web_index():
+    """Open the local web workbench."""
+    if web_dir.is_dir():
+        return RedirectResponse(url="/web/")
+    return {"name": get_settings().instance_name}
 
 
 @app.get("/health", tags=["health"])

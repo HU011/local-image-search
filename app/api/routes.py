@@ -1,6 +1,14 @@
 """API routes for image ingest, search, stats, and error records."""
 
+import asyncio
+import base64
+import hashlib
+import mimetypes
+import re
 import time
+from pathlib import PurePosixPath
+from urllib import request as url_request
+from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
@@ -23,6 +31,9 @@ from app.api.schemas import (
     SearchResponse,
     SearchResult,
     StatsResponse,
+    UrlIngestError,
+    UrlIngestRequest,
+    UrlIngestResponse,
 )
 from app.core.queue import IngestTask, task_queue
 from app.services.embedding import embedding_service
@@ -33,6 +44,50 @@ from app.utils.image import decode_base64_image
 
 
 router = APIRouter()
+MAX_EXTERNAL_IMAGE_BYTES = 20 * 1024 * 1024
+
+
+def _sanitize_id_part(value: str) -> str:
+    clean_value = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return clean_value[:100]
+
+
+def _image_id_from_url(url: str, id_prefix: str, index: int) -> str:
+    parsed = urlparse(url)
+    filename = PurePosixPath(unquote(parsed.path)).name
+    stem = re.sub(r"\.[^.]+$", "", filename) if filename else ""
+    base = _sanitize_id_part(stem) or f"url-{index + 1}"
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:10]
+    prefix = _sanitize_id_part(id_prefix)
+    if prefix:
+        return f"{prefix}-{base}-{digest}"
+    return f"{base}-{digest}"
+
+
+def _fetch_external_image_as_data_uri(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Only http and https image URLs are supported")
+
+    request = url_request.Request(
+        url,
+        headers={"User-Agent": "LocalImageSearch/1.0"},
+        method="GET",
+    )
+    with url_request.urlopen(request, timeout=30) as response:
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        data = response.read(MAX_EXTERNAL_IMAGE_BYTES + 1)
+
+    if len(data) > MAX_EXTERNAL_IMAGE_BYTES:
+        raise ValueError("Image is larger than 20 MB")
+
+    guessed_type = mimetypes.guess_type(urlparse(url).path)[0]
+    mime_type = content_type or guessed_type or "image/jpeg"
+    if content_type and not content_type.startswith("image/"):
+        raise ValueError(f"URL returned non-image content type: {content_type}")
+
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
 
 @router.post("/images/ingest", response_model=ImageIngestResponse, tags=["ingest"])
@@ -62,6 +117,53 @@ async def ingest_images_batch(request: BatchIngestRequest):
     return BatchIngestResponse(
         queued_count=len(tasks),
         queue_position_start=start_position,
+    )
+
+
+@router.post("/images/ingest/urls", response_model=UrlIngestResponse, tags=["ingest"])
+async def ingest_image_urls(request: UrlIngestRequest):
+    """Fetch external image URLs server-side and queue them for indexing."""
+    clean_urls = []
+    seen = set()
+    for url in request.urls:
+        clean_url = str(url or "").strip()
+        if clean_url and clean_url not in seen:
+            clean_urls.append(clean_url)
+            seen.add(clean_url)
+
+    candidates = [
+        (url, _image_id_from_url(url, request.id_prefix, index))
+        for index, url in enumerate(clean_urls)
+    ]
+    skipped_count = 0
+    if request.skip_existing and candidates:
+        existing = vector_db.existing_payload_ids([image_id for _, image_id in candidates])
+        skipped_count = len(existing)
+        candidates = [
+            (url, image_id)
+            for url, image_id in candidates
+            if image_id not in existing
+        ]
+
+    tasks = []
+    errors = []
+    for url, image_id in candidates:
+        try:
+            base64_image = await asyncio.to_thread(_fetch_external_image_as_data_uri, url)
+            tasks.append(IngestTask(id=image_id, base64=base64_image, url=url))
+        except Exception as exc:
+            errors.append(UrlIngestError(url=url, error_message=str(exc)))
+
+    queue_position_start = await task_queue.size() + 1 if tasks else 0
+    if tasks:
+        await task_queue.put_batch(tasks)
+
+    return UrlIngestResponse(
+        queued_count=len(tasks),
+        skipped_count=skipped_count,
+        failed_count=len(errors),
+        queue_position_start=queue_position_start,
+        errors=errors,
     )
 
 

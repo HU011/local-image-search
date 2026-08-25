@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>本地以图搜图工作台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">LOCAL IMAGE SEARCH</p>
+          <h1>本地以图搜图工作台</h1>
+          <p class="subhead">上传查询图搜索相似图片，也可以把本地或局域网图片导入索引。</p>
+        </div>
+        <div class="status-strip" aria-label="服务状态">
+          <div class="status-pill" id="serviceStatus">
+            <span class="dot"></span>
+            检查中
+          </div>
+          <div class="metric">
+            <span>索引</span>
+            <strong id="totalImages">-</strong>
+          </div>
+          <div class="metric">
+            <span>队列</span>
+            <strong id="queueCount">-</strong>
+          </div>
+          <div class="metric">
+            <span>失败</span>
+            <strong id="failedCount">-</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="tool-panel search-panel" aria-labelledby="searchTitle">
+          <div class="panel-head">
+            <div>
+              <h2 id="searchTitle">图片搜索</h2>
+              <p>选择一张图片，返回索引中最相似的结果。</p>
+            </div>
+            <button class="ghost-button" id="refreshStatusBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21 12a9 9 0 0 1-15.36 6.36M3 12A9 9 0 0 1 18.36 5.64M3 19v-5h5M21 5v5h-5" />
+              </svg>
+              刷新状态
+            </button>
+          </div>
+
+          <div class="search-layout">
+            <label class="dropzone" id="queryDropzone">
+              <input id="queryFileInput" type="file" accept="image/*" />
+              <span class="drop-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <path d="M17 8 12 3 7 8" />
+                  <path d="M12 3v12" />
+                </svg>
+              </span>
+              <strong>选择或拖入查询图片</strong>
+              <small>JPG、PNG、WEBP、BMP、TIFF</small>
+              <img id="queryPreview" alt="查询图片预览" hidden />
+            </label>
+
+            <div class="controls">
+              <label>
+                返回数量
+                <select id="topKInput">
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                  <option value="40">40</option>
+                  <option value="60">60</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+              <label>
+                相似度阈值
+                <input id="thresholdInput" type="number" min="0" max="1" step="0.01" placeholder="可不填" />
+              </label>
+              <div class="button-row">
+                <button class="primary-button" id="searchBtn" type="button" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  开始搜索
+                </button>
+                <button class="secondary-button" id="clearSearchBtn" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                  清空
+                </button>
+              </div>
+              <p class="hint" id="searchHint">服务地址会自动使用当前页面所在主机。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel results-panel" aria-labelledby="resultsTitle">
+          <div class="panel-head">
+            <div>
+              <h2 id="resultsTitle">搜索结果</h2>
+              <p id="resultSummary">上传图片后在这里显示匹配结果。</p>
+            </div>
+          </div>
+          <div class="results-grid" id="resultsGrid">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <circle cx="9" cy="10" r="2" />
+                <path d="m21 16-5-5L5 20" />
+              </svg>
+              <strong>暂无结果</strong>
+              <span>选择一张查询图片后开始搜索。</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel import-panel" aria-labelledby="importTitle">
+          <div class="panel-head">
+            <div>
+              <h2 id="importTitle">导入图片</h2>
+              <p>把图片加入本地索引，导入后可直接参与相似度搜索。</p>
+            </div>
+          </div>
+
+          <div class="import-grid">
+            <label class="dropzone compact" id="importDropzone">
+              <input id="importFileInput" type="file" accept="image/*" multiple />
+              <span class="drop-icon small">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v12" />
+                  <path d="M17 8 12 3 7 8" />
+                  <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+              </span>
+              <strong>本地文件导入</strong>
+              <small id="importFileSummary">可一次选择多张图片</small>
+            </label>
+
+            <div class="url-import">
+              <label for="urlInput">外部图片 URL</label>
+              <textarea id="urlInput" rows="7" placeholder="每行一个 http:// 或 https:// 图片地址"></textarea>
+            </div>
+          </div>
+
+          <div class="import-options">
+            <label>
+              ID 前缀
+              <input id="idPrefixInput" type="text" placeholder="可不填" />
+            </label>
+            <label>
+              每批数量
+              <select id="batchSizeInput">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+              </select>
+            </label>
+            <label class="checkline">
+              <input id="skipExistingInput" type="checkbox" checked />
+              跳过已存在 ID
+            </label>
+            <button class="primary-button" id="importBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12" />
+                <path d="M17 8 12 3 7 8" />
+                <path d="M5 21h14" />
+              </svg>
+              开始导入
+            </button>
+          </div>
+
+          <div class="progress-wrap" aria-label="导入进度">
+            <div class="progress-track">
+              <span id="importProgressBar"></span>
+            </div>
+            <p id="importProgressText">等待导入</p>
+          </div>
+        </section>
+
+        <section class="tool-panel log-panel" aria-labelledby="logTitle">
+          <div class="panel-head">
+            <div>
+              <h2 id="logTitle">运行日志</h2>
+              <p>只显示当前网页操作产生的搜索和导入信息。</p>
+            </div>
+            <button class="ghost-button" id="clearLogBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18" />
+                <path d="M8 6V4h8v2" />
+                <path d="M19 6l-1 14H6L5 6" />
+              </svg>
+              清空日志
+            </button>
+          </div>
+          <div class="log-list" id="logList" aria-live="polite"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

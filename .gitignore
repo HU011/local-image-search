@@ -1,0 +1,42 @@
+# Local configuration
+.env
+.env.local
+
+# Python and runtime files
+.venv/
+venv/
+python/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local service binaries and downloaded dependencies
+vendor/
+tools/qdrant/
+models/
+
+# Runtime data
+data/
+logs/
+.qdrant-initialized
+*.pid
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.snapshot
+
+# Archives and delivery-only files
+*.zip
+RULES.md
+scripts/migrate_local_qdrant.py
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

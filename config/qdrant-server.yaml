@@ -1,0 +1,21 @@
+log_level: INFO
+
+storage:
+  storage_path: "./data/qdrant-server/storage"
+  snapshots_path: "./data/qdrant-server/snapshots"
+  on_disk_payload: true
+  performance:
+    max_search_threads: 0
+    optimizer_cpu_budget: 12
+
+service:
+  host: 127.0.0.1
+  http_port: 6335
+  grpc_port: 6336
+  enable_cors: false
+  enable_tls: false
+
+cluster:
+  enabled: false
+
+telemetry_disabled: true

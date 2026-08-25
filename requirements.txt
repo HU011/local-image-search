@@ -1,0 +1,32 @@
+# FastAPI & Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.9
+
+# Pydantic
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+
+# Image Processing
+Pillow>=10.4.0
+numpy>=1.26.0
+
+# ML / Embedding
+torch>=2.4.0
+transformers>=4.48.0
+accelerate>=0.34.0
+
+# Vector Database
+qdrant-client>=1.19.0
+
+# Database (Error Storage)
+aiosqlite>=0.20.0
+
+# Redis (Queue Persistence)
+redis>=5.2.0
+
+# Logging
+loguru>=0.7.2
+
+# Utils
+python-dotenv>=1.0.1
